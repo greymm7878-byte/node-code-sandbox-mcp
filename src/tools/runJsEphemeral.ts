@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { execFileSync } from 'child_process';
+import { execFileSync } from 'node:child_process';
 import tmp from 'tmp';
 import { randomUUID } from 'crypto';
 import { type McpResponse, textContent } from '../types.ts';

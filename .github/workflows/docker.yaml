@@ -1,10 +1,8 @@
 name: Publish Multi-Arch Image
 on:
   push:
-    # only fire on tag pushes matching vMAJOR.MINOR.PATCH
-    tags:
-      - 'v*.*.*'
-  workflow_dispatch: {}
+    branches: [master]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,3 +27,5 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          push: true
+          tags: alfonsograziano/node-code-sandbox-mcp:latest

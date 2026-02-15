@@ -7,9 +7,16 @@ import {
   afterEach,
   type Mock,
 } from 'vitest';
-import searchNpmPackages from '../src/tools/searchNpmPackages.ts';
+import searchNpmPackages, {
+  PackageDetails,
+  SearchNpmPackagesToolSchemaType,
+} from '../src/tools/searchNpmPackages.ts';
 import { NpmRegistry } from 'npm-registry-sdk';
-import type { McpContentText } from '../src/types.ts';
+import {
+  textContent,
+  type McpContentText,
+  type McpResponse,
+} from '../src/types.ts';
 
 vi.mock('npm-registry-sdk');
 
@@ -199,3 +206,84 @@ describe('searchNpmPackages', () => {
     expect(getPackageMock).not.toHaveBeenCalled();
   });
 });
+export class SearchNpmPackagesTool {
+  private readonly registry: NpmRegistry;
+  private readonly maxResults = 5;
+  private readonly maxReadmeLength = 500;
+
+  constructor() {
+    this.registry = new NpmRegistry();
+  }
+
+  /**
+   * Searches for npm packages based on the provided search term and qualifiers
+   * @param {SearchNpmPackagesToolSchemaType} params - Search parameters including search term and optional qualifiers
+   * @returns {Promise<McpResponse>} A response containing the search results or an error message
+   */
+  public async searchPackages({
+    searchTerm,
+    qualifiers,
+  }: SearchNpmPackagesToolSchemaType): Promise<McpResponse> {
+    const searchResults = await this.registry.search(searchTerm, {
+      qualifiers,
+    });
+
+    if (!searchResults.total) {
+      return {
+        content: [textContent('No packages found.')],
+      };
+    }
+
+    const packages = searchResults.objects
+      .sort((a, b) => b.score.detail.popularity - a.score.detail.popularity)
+      .slice(0, this.maxResults)
+      .map((result) => result.package.name);
+
+    const packagesInfos = await this.getPackagesDetails(packages);
+
+    return {
+      content: [textContent(JSON.stringify(packagesInfos, null, 2))],
+    };
+  }
+
+  /**
+   * Retrieves detailed information for multiple packages
+   * @param {string[]} packages - Array of package names to get details for
+   * @returns {Promise<PackageDetails[]>} Array of package details
+   * @private
+   */
+  private async getPackagesDetails(
+    packages: string[]
+  ): Promise<PackageDetails[]> {
+    const multiPackageInfo: PackageInfo[] = await Promise.all(
+      packages.map((pkg) => this.registry.getPackage(pkg))
+    );
+
+    const packagesDetails: PackageDetails[] = [];
+
+    for (const packageInfo of Object.values(multiPackageInfo)) {
+      packagesDetails.push({
+        name: packageInfo.name,
+        description: packageInfo.description || 'No description available.',
+        readmeSnippet: this.extractReadmeSnippet(packageInfo.readme),
+      });
+    }
+
+    return packagesDetails;
+  }
+
+  /**
+   * Extracts a snippet from a package's README file
+   * @param {string | undefined} readme - The full README content
+   * @returns {string} A truncated snippet of the README or a default message if README is not available
+   * @private
+   */
+  private extractReadmeSnippet(readme: string | undefined): string {
+    if (!readme) {
+      return 'README not available.';
+    }
+
+    const snippet = readme.substring(0, this.maxReadmeLength);
+    return snippet.length === this.maxReadmeLength ? snippet + '...' : snippet;
+  }
+}
